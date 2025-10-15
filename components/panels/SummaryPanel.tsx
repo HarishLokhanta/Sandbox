@@ -3,12 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 
 type SummaryPanelProps = {
   summary?: unknown;
@@ -173,17 +167,6 @@ export function SummaryPanel({ summary, error }: SummaryPanelProps) {
             ))}
           </div>
         )}
-
-        <Accordion type="single" collapsible className="mt-6">
-          <AccordionItem value="raw-json">
-            <AccordionTrigger>Raw JSON</AccordionTrigger>
-            <AccordionContent>
-              <pre className="max-h-64 overflow-x-auto rounded-lg bg-slate-900/95 px-4 py-3 text-xs text-slate-100">
-                {JSON.stringify(summary ?? {}, null, 2)}
-              </pre>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </CardContent>
     </Card>
   );

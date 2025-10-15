@@ -8,6 +8,7 @@ export type MarkerItem = {
   label?: string;
   type?: "amenity" | "property" | "school";
   category?: string;
+  id?: string; // Unique identifier for the marker
 };
 
 type MapProps = {

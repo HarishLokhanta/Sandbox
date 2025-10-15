@@ -5,6 +5,10 @@ export type School = {
   level?: string | null;
   sector?: string | null;
   rating?: number | null;
+  naplan_rank?: string | null;
+  attendance_rate?: number | null;
+  school_level_type?: string | null;
+  school_sector_type?: string | null;
   raw?: any;
 };
 
@@ -126,4 +130,122 @@ export async function fetchSchoolsFromAPI(suburb: string): Promise<School[]> {
 
   const data = await response.json();
   return normalizeSchools(data);
+}
+
+// Fetch schools with coordinates joined from amenities (for client-side use)
+export async function fetchSchoolsWithCoordinates(suburb: string): Promise<School[]> {
+  // For client-side, use the internal API
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams({ suburb });
+    const response = await fetch(`/api/schools?${params.toString()}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+      throw new Error(errorData.error || `Failed to fetch schools: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const results = data?.results ?? [];
+
+    // Map to School type
+    return results.map((item: any) => ({
+      lat: item.lat,
+      lng: item.lng,
+      name: item.name || "Unnamed School",
+      level: item.school_level_type || null,
+      sector: item.school_sector_type || null,
+      rating: null,
+      naplan_rank: item.naplan_rank || null,
+      attendance_rate: item.attendance_rate || null,
+      school_level_type: item.school_level_type || null,
+      school_sector_type: item.school_sector_type || null,
+      raw: item,
+    }));
+  }
+
+  // For server-side, fetch directly from upstream and join manually
+  const headers = {
+    Authorization: "Bearer test",
+    "Content-Type": "application/json",
+  };
+
+  const [schoolsRes, amenityRes] = await Promise.all([
+    fetch(
+      `https://www.microburbs.com.au/report_generator/api/suburb/schools?suburb=${encodeURIComponent(suburb)}`,
+      { headers, cache: "no-store" }
+    ),
+    fetch(
+      `https://www.microburbs.com.au/report_generator/api/suburb/amenity?suburb=${encodeURIComponent(suburb)}`,
+      { headers, cache: "no-store" }
+    ),
+  ]);
+
+  if (!schoolsRes.ok) {
+    throw new Error(`Failed to fetch schools: ${schoolsRes.status}`);
+  }
+  if (!amenityRes.ok) {
+    throw new Error(`Failed to fetch amenities: ${amenityRes.status}`);
+  }
+
+  const schoolsData = await schoolsRes.json();
+  const amenityData = await amenityRes.json();
+
+  const schoolAmenities = (amenityData?.results ?? []).filter(
+    (a: Record<string, unknown>) =>
+      (a?.category ?? "").toString().toLowerCase() === "school"
+  );
+
+  const norm = (s: string) => (s || "").toLowerCase().trim();
+
+  const results = (schoolsData?.results ?? []).map((s: Record<string, unknown>) => {
+    const name = s?.name?.toString() ?? "";
+    const match = schoolAmenities.find((a: Record<string, unknown>) => {
+      const an = a?.name?.toString() ?? "";
+      return (
+        norm(an) === norm(name) ||
+        norm(an).includes(norm(name)) ||
+        norm(name).includes(norm(an))
+      );
+    });
+
+    return {
+      id: s?.id ?? null,
+      name,
+      area_level: s?.area_level ?? "suburb",
+      area_name: s?.area_name ?? suburb,
+      school_level_type: s?.school_level_type ?? null,
+      school_sector_type: s?.school_sector_type ?? null,
+      naplan_rank: s?.naplan_rank ?? null,
+      attendance_rate: s?.attendance_rate ?? null,
+      boys: s?.boys ?? null,
+      girls: s?.girls ?? null,
+      socioeconomic_rank: s?.socioeconomic_rank ?? null,
+      lat: Number(match?.lat ?? NaN),
+      lng: Number(match?.lon ?? match?.lng ?? NaN),
+      hasCoords:
+        Number.isFinite(Number(match?.lat)) &&
+        Number.isFinite(Number(match?.lon ?? match?.lng)),
+    };
+  });
+
+  // Only return those we can place on the map
+  const withCoords = results.filter((r: Record<string, unknown>) => r.hasCoords);
+
+  // Map to School type
+  return withCoords.map((item: any) => ({
+    lat: item.lat,
+    lng: item.lng,
+    name: item.name || "Unnamed School",
+    level: item.school_level_type || null,
+    sector: item.school_sector_type || null,
+    rating: null,
+    naplan_rank: item.naplan_rank || null,
+    attendance_rate: item.attendance_rate || null,
+    school_level_type: item.school_level_type || null,
+    school_sector_type: item.school_sector_type || null,
+    raw: item,
+  }));
 }

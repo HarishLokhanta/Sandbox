@@ -2,19 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useAmenitiesStore } from "@/lib/stores/useAmenitiesStore";
 
 import type { MarkerItem } from "@/components/Map";
-import { AmenitiesPanel, type AmenityRecord } from "@/components/panels/AmenitiesPanel";
+import type { AmenityRecord } from "@/components/panels/AmenitiesPanel";
 import {
   PropertiesPanel,
   type PropertyRecord,
 } from "@/components/panels/PropertiesPanel";
 import { SimilarPanel, type SimilarRecord } from "@/components/panels/SimilarPanel";
 import { SummaryPanel } from "@/components/panels/SummaryPanel";
+import { SchoolsPanel } from "@/components/panels/SchoolsPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { MapPin } from "lucide-react";
+import type { School } from "@/lib/schools";
 
 const Map = dynamic(() => import("../Map"), {
   ssr: false,
@@ -50,6 +54,11 @@ type BelmontNorthDashboardProps = {
     data?: unknown;
     error?: string;
   };
+  schools: {
+    items?: School[];
+    error?: string;
+    isLoading?: boolean;
+  };
 };
 
 function toFiniteNumber(value: unknown): number | null {
@@ -78,19 +87,20 @@ function getAmenityCoordinates(record: AmenityRecord | undefined | null): Coordi
     return null;
   }
 
+  const coords = record.coordinates as Record<string, unknown> | undefined;
   const lat = pickFirstFinite(
     record.latitude,
     record.lat,
-    record.coordinates?.latitude,
-    record.coordinates?.lat
+    coords?.latitude,
+    coords?.lat
   );
   const lng = pickFirstFinite(
     record.longitude,
     record.lon,
     record.lng,
-    record.coordinates?.longitude,
-    record.coordinates?.lon,
-    record.coordinates?.lng
+    coords?.longitude,
+    coords?.lon,
+    coords?.lng
   );
 
   if (lat === null || lng === null) {
@@ -131,19 +141,20 @@ function getPropertyCoordinates(record: PropertyRecord | undefined | null): Coor
     return null;
   }
 
+  const coords = record.coordinates as Record<string, unknown> | undefined;
   const lat = pickFirstFinite(
     record.latitude,
     record.lat,
-    record.coordinates?.latitude,
-    record.coordinates?.lat
+    coords?.latitude,
+    coords?.lat
   );
   const lng = pickFirstFinite(
     record.longitude,
     record.lon,
     record.lng,
-    record.coordinates?.longitude,
-    record.coordinates?.lon,
-    record.coordinates?.lng
+    coords?.longitude,
+    coords?.lon,
+    coords?.lng
   );
 
   if (lat === null || lng === null) {
@@ -175,12 +186,22 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
     properties,
     similar,
     summary,
+    schools,
   } = props;
+
+  const { setAmenities, amenities: storeAmenities } = useAmenitiesStore();
 
   const amenityItems = useMemo<AmenityRecord[]>(
     () => (Array.isArray(amenities?.items) ? amenities.items : []),
     [amenities?.items]
   );
+
+  // Populate the store with amenities
+  useEffect(() => {
+    if (amenityItems.length > 0) {
+      setAmenities(amenityItems);
+    }
+  }, [amenityItems, setAmenities]);
   const propertyItems = useMemo<PropertyRecord[]>(
     () => (Array.isArray(properties?.items) ? properties.items : []),
     [properties?.items]
@@ -189,26 +210,56 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
     () => (Array.isArray(similar?.items) ? similar.items : []),
     [similar?.items]
   );
+  const schoolItems = useMemo<School[]>(
+    () => (Array.isArray(schools?.items) ? schools.items : []),
+    [schools?.items]
+  );
 
   const safeCenter = sanitizeCenter(providedCenter);
 
   const amenityMarkers = useMemo<MarkerItem[]>(() => {
-    return amenityItems
-      .map((amenity) => {
-        const coords = getAmenityCoordinates(amenity);
-        if (!coords) {
-          return null;
-        }
-        return {
-          lat: coords.lat,
-          lng: coords.lng,
-          label: amenity.name?.trim() || amenity.category || amenity.type || "Amenity",
-          type: "amenity" as const,
-          category: amenity.category || amenity.type || undefined,
-        } satisfies MarkerItem;
-      })
-      .filter((marker): marker is MarkerItem => Boolean(marker));
-  }, [amenityItems]);
+    const markers: MarkerItem[] = [];
+    // Use store amenities if available for IDs, otherwise use amenityItems
+    const sourceAmenities = storeAmenities.length > 0 ? storeAmenities : amenityItems;
+
+    for (const amenity of sourceAmenities) {
+      const coords = getAmenityCoordinates(amenity);
+      if (!coords) {
+        continue;
+      }
+
+      const displayName =
+        typeof amenity?.displayName === "string" && amenity.displayName.trim().length > 0
+          ? amenity.displayName.trim()
+          : typeof amenity?.rawName === "string" && amenity.rawName.trim().length > 0
+          ? amenity.rawName.trim()
+          : typeof amenity?.name === "string" && amenity.name.trim().length > 0
+          ? amenity.name.trim()
+          : "";
+
+      const categoryLabel =
+        typeof amenity?.category === "string" && amenity.category.trim().length > 0
+          ? amenity.category.trim()
+          : typeof amenity?.type === "string" && amenity.type.trim().length > 0
+          ? amenity.type.trim()
+          : undefined;
+
+      const fallbackLabel = categoryLabel
+        ? `${categoryLabel} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
+        : `Amenity (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+
+      markers.push({
+        lat: coords.lat,
+        lng: coords.lng,
+        label: displayName || fallbackLabel,
+        type: "amenity" as const,
+        category: categoryLabel,
+        id: (amenity as any).id, // Include the ID from the store
+      });
+    }
+
+    return markers;
+  }, [storeAmenities, amenityItems]);
 
   const { propertyMarkers, propertyLookup } = useMemo(() => {
     const lookup: Record<string, PropertyRecord> = {};
@@ -234,11 +285,30 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
     return { propertyMarkers: markers, propertyLookup: lookup };
   }, [propertyItems]);
 
+  const schoolMarkers = useMemo<MarkerItem[]>(() => {
+    return schoolItems
+      .filter((school) => {
+        return (
+          typeof school.lat === "number" &&
+          Number.isFinite(school.lat) &&
+          typeof school.lng === "number" &&
+          Number.isFinite(school.lng)
+        );
+      })
+      .map((school) => ({
+        lat: school.lat,
+        lng: school.lng,
+        label: school.name,
+        type: "school" as const,
+      }));
+  }, [schoolItems]);
+
   const [activeMarker, setActiveMarker] = useState<MarkerItem | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<PropertyRecord | null>(null);
 
   const amenityCount = amenityItems.length;
   const propertyCount = propertyItems.length;
+  const schoolCount = schoolItems.length;
   const summaryData = summary?.data;
   const summaryError = summary?.error;
   const medianPrice = findMedianFromSummary(summaryData ?? null);
@@ -265,20 +335,28 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
 
   const handleFocusProperty = (marker: MarkerItem) => {
     handleFocusMarker(marker);
-    const key = coordinateKey({ lat: marker.lat, lng: marker.lng });
-    const match = propertyLookup[key];
-    if (match) {
-      setSelectedProperty(match);
+    const lat = toFiniteNumber(marker.lat);
+    const lng = toFiniteNumber(marker.lng);
+    if (lat !== null && lng !== null) {
+      const key = coordinateKey({ lat, lng });
+      const match = propertyLookup[key];
+      if (match) {
+        setSelectedProperty(match);
+      }
     }
   };
 
   const handleMarkerClick = (marker: MarkerItem) => {
     handleFocusMarker(marker);
     if (marker.type === "property") {
-      const key = coordinateKey({ lat: marker.lat, lng: marker.lng });
-      const match = propertyLookup[key];
-      if (match) {
-        setSelectedProperty(match);
+      const lat = toFiniteNumber(marker.lat);
+      const lng = toFiniteNumber(marker.lng);
+      if (lat !== null && lng !== null) {
+        const key = coordinateKey({ lat, lng });
+        const match = propertyLookup[key];
+        if (match) {
+          setSelectedProperty(match);
+        }
       }
     }
   };
@@ -309,6 +387,7 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
             center={safeCenter}
             amenityMarkers={amenityMarkers}
             propertyMarkers={propertyMarkers}
+            schoolMarkers={schoolMarkers}
             activeMarker={activeMarker}
             onMarkerClick={handleMarkerClick}
           />
@@ -327,6 +406,12 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
                 <span>Active listings</span>
                 <Badge variant="outline" className="border-blue-200 text-blue-700">
                   {propertyCount}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <span>Schools nearby</span>
+                <Badge variant="outline" className="border-yellow-200 text-yellow-700">
+                  {schoolCount}
                 </Badge>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
@@ -358,32 +443,61 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
           <TabsList>
             <TabsTrigger value="amenities">Amenities</TabsTrigger>
             <TabsTrigger value="properties">For Sale</TabsTrigger>
+            <TabsTrigger value="schools">Schools Nearby</TabsTrigger>
             <TabsTrigger value="similar">Similar</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
 
           <TabsContent value="amenities">
-            <AmenitiesPanel
-              amenities={amenityItems}
-              error={amenities?.error}
-              raw={amenities?.raw}
-              onFocusAmenity={handleFocusMarker}
-            />
+            <Card className="bg-white">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-slate-900">Amenities</CardTitle>
+                <p className="text-sm text-slate-500">
+                  To view amenities, click the black dots on the map.
+                </p>
+              </CardHeader>
+              <Separator className="mx-6" />
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4 rounded-lg border border-slate-200 bg-slate-50 p-6">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-900">
+                    <MapPin className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <h3 className="font-semibold text-slate-900">Interactive Map Markers</h3>
+                    <p className="text-sm text-slate-600">
+                      All amenities are displayed as black markers on the map above. Click any marker
+                      to view details about that location including its name and category.
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {amenityCount} amenity location{amenityCount === 1 ? '' : 's'} available on the map
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="properties">
             <PropertiesPanel
               properties={propertyItems}
               error={properties?.error}
-              raw={properties?.raw}
               onFocusProperty={handleFocusProperty}
               selectedProperty={selectedProperty}
               onSelectPropertyChange={setSelectedProperty}
             />
           </TabsContent>
 
+          <TabsContent value="schools">
+            <SchoolsPanel
+              schools={schoolItems}
+              isLoading={schools?.isLoading}
+              error={schools?.error}
+              onViewOnMap={handleFocusMarker}
+            />
+          </TabsContent>
+
           <TabsContent value="similar">
-            <SimilarPanel records={similarItems} error={similar?.error} raw={similar?.raw} />
+            <SimilarPanel records={similarItems} error={similar?.error} />
           </TabsContent>
 
           <TabsContent value="summary">

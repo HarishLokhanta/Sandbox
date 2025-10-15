@@ -15,7 +15,7 @@ import type {
   RiskData,
 } from "./schemas";
 import { fetchAmenitiesFromAPI } from "./amenities";
-import { fetchSchoolsFromAPI } from "./schools";
+import { fetchSchoolsFromAPI, fetchSchoolsWithCoordinates } from "./schools";
 import type { Amenity as NormalizedAmenity } from "./amenities";
 import type { School } from "./schools";
 
@@ -295,7 +295,7 @@ async function fetchSimilarSuburbs(suburb: string, signal?: AbortSignal) {
           similar: Array.isArray((body as any).similar)
             ? (body as any).similar
             : Array.isArray((body as any).results)
-            ? (body as any).results)
+            ? (body as any).results
             : [],
           suburb:
             typeof (body as any).suburb === "string" ? (body as any).suburb : undefined,
@@ -442,7 +442,7 @@ export function useSchools(
 ) {
   return useQuery({
     queryKey: queryKeys.schools(suburb),
-    queryFn: () => fetchSchoolsFromAPI(suburb),
+    queryFn: () => fetchSchoolsWithCoordinates(suburb),
     enabled: !!suburb,
     ...options,
   });

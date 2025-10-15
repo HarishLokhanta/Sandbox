@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { useAmenitiesStore } from "@/lib/stores/useAmenitiesStore";
 
 const DEFAULT_CENTER: [number, number] = [-33.014, 151.667];
 const DEFAULT_ZOOM = 13;
@@ -29,6 +30,7 @@ export type MarkerItem = {
   label?: string;
   type?: "amenity" | "property" | "school";
   category?: string;
+  id?: string; // Unique identifier for the marker
 };
 
 type MapProps = {
@@ -102,6 +104,9 @@ export default function LeafletInner(props: MapProps) {
     activeMarker = null,
   } = props ?? {};
 
+  const { selectAmenity, selectedAmenityId } = useAmenitiesStore();
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map());
+
   const center: [number, number] = useMemo(() => {
     if (!Array.isArray(providedCenter) || providedCenter.length !== 2) {
       return DEFAULT_CENTER;
@@ -131,6 +136,16 @@ export default function LeafletInner(props: MapProps) {
   }, [providedSchools]);
 
   const active = sanitizeMarker(activeMarker ?? undefined);
+
+  // Open popup when amenity is selected from the panel
+  useEffect(() => {
+    if (selectedAmenityId) {
+      const markerRef = markerRefs.current.get(selectedAmenityId);
+      if (markerRef) {
+        markerRef.openPopup();
+      }
+    }
+  }, [selectedAmenityId]);
 
   return (
     <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -162,7 +177,19 @@ export default function LeafletInner(props: MapProps) {
             key={`amenity-${index}-${marker.lat}-${marker.lng}`}
             position={[marker.lat, marker.lng]}
             icon={getDivIcon(marker)}
-            eventHandlers={{ click: () => onMarkerClick?.(marker) }}
+            eventHandlers={{
+              click: () => {
+                if (marker.id) {
+                  selectAmenity(marker.id);
+                }
+                onMarkerClick?.(marker);
+              },
+            }}
+            ref={(ref) => {
+              if (ref && marker.id) {
+                markerRefs.current.set(marker.id, ref);
+              }
+            }}
           >
             {marker.label && <Popup>{marker.label}</Popup>}
           </Marker>

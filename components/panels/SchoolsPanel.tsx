@@ -4,12 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
 import { MapPin, GraduationCap } from "lucide-react";
 import type { School } from "@/lib/schools";
@@ -85,15 +79,25 @@ export function SchoolsPanel({
                   <div className="flex-1">
                     <h4 className="font-semibold text-slate-900">{school.name}</h4>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                      {school.sector && (
+                      {(school.school_sector_type || school.sector) && (
                         <Badge variant="outline" className="bg-yellow-50 text-yellow-800">
-                          {school.sector}
+                          {school.school_sector_type || school.sector}
                         </Badge>
                       )}
-                      {school.level && (
+                      {(school.school_level_type || school.level) && (
                         <Badge variant="outline" className="bg-blue-50 text-blue-800">
-                          {school.level}
+                          {school.school_level_type || school.level}
                         </Badge>
+                      )}
+                      {school.naplan_rank && (
+                        <Badge variant="outline" className="bg-green-50 text-green-800">
+                          NAPLAN: {school.naplan_rank}
+                        </Badge>
+                      )}
+                      {school.attendance_rate !== null && school.attendance_rate !== undefined && (
+                        <span className="text-slate-500">
+                          Attendance: {(school.attendance_rate * 100).toFixed(0)}%
+                        </span>
                       )}
                       {school.rating !== null && school.rating !== undefined && (
                         <span className="text-slate-500">
@@ -123,17 +127,6 @@ export function SchoolsPanel({
             </div>
           </ScrollArea>
         )}
-
-        <Accordion type="single" collapsible className="mt-6">
-          <AccordionItem value="raw-json">
-            <AccordionTrigger>Raw JSON</AccordionTrigger>
-            <AccordionContent>
-              <pre className="max-h-64 overflow-x-auto rounded-lg bg-slate-900/95 px-4 py-3 text-xs text-slate-100">
-                {JSON.stringify(schools, null, 2)}
-              </pre>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </CardContent>
     </Card>
   );

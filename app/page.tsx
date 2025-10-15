@@ -3,6 +3,7 @@ import type { MarkerItem } from "@/components/Map";
 import type { AmenityRecord } from "@/components/panels/AmenitiesPanel";
 import type { PropertyRecord } from "@/components/panels/PropertiesPanel";
 import type { SimilarRecord } from "@/components/panels/SimilarPanel";
+import { fetchSchoolsWithCoordinates } from "@/lib/schools";
 
 const DEFAULT_CENTER: [number, number] = [-33.014, 151.667];
 
@@ -148,12 +149,20 @@ function buildAmenityMarkers(amenities: AmenityRecord[]): MarkerItem[] {
       const nested = amenity.coordinates as Record<string, unknown>;
       const nestedCoords = toCoordinates(nested);
       if (nestedCoords) {
+        const label =
+          (typeof amenity.name === "string" && amenity.name) ||
+          (typeof amenity.type === "string" && amenity.type) ||
+          "Amenity";
+        const category =
+          (typeof amenity.category === "string" && amenity.category) ||
+          (typeof amenity.type === "string" && amenity.type) ||
+          undefined;
         markers.push({
           lat: nestedCoords.lat,
           lng: nestedCoords.lng,
-          label: amenity.name || amenity.type || "Amenity",
+          label,
           type: "amenity",
-          category: amenity.category || amenity.type || undefined,
+          category,
         });
         continue;
       }
@@ -163,12 +172,30 @@ function buildAmenityMarkers(amenities: AmenityRecord[]): MarkerItem[] {
       continue;
     }
 
+    const displayName =
+      typeof amenity?.displayName === "string" && amenity.displayName.trim().length > 0
+        ? amenity.displayName.trim()
+        : typeof amenity?.name === "string" && amenity.name.trim().length > 0
+        ? amenity.name.trim()
+        : "";
+
+    const categoryLabel =
+      typeof amenity?.category === "string" && amenity.category.trim().length > 0
+        ? amenity.category.trim()
+        : typeof amenity?.type === "string" && amenity.type.trim().length > 0
+        ? amenity.type.trim()
+        : undefined;
+
     markers.push({
       lat: coords.lat,
       lng: coords.lng,
-      label: amenity.name || amenity.type || "Amenity",
+      label:
+        displayName ||
+        (categoryLabel
+          ? `${categoryLabel} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
+          : `Amenity (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`),
       type: "amenity",
-      category: amenity.category || amenity.type || undefined,
+      category: categoryLabel,
     });
   }
 
@@ -239,11 +266,15 @@ function buildPropertyMarkers(properties: PropertyRecord[]): MarkerItem[] {
 export default async function Page() {
   const baseUrl = getBaseUrl();
 
-  const [amenitiesRes, propertiesRes, similarRes, summaryRes] = await Promise.all([
+  const [amenitiesRes, propertiesRes, similarRes, summaryRes, schoolsResult] = await Promise.all([
     fetchProxy(baseUrl, "/api/amenities"),
     fetchProxy(baseUrl, "/api/properties"),
     fetchProxy(baseUrl, "/api/similar"),
     fetchProxy(baseUrl, "/api/summary"),
+    fetchSchoolsWithCoordinates("Belmont North").catch((error: Error) => {
+      console.error("Failed to fetch schools:", error);
+      return [];
+    }),
   ]);
 
   const amenitiesList = extractAmenities(amenitiesRes.data);
@@ -271,10 +302,11 @@ export default async function Page() {
           center={DEFAULT_CENTER}
           amenityMarkers={amenityMarkers}
           propertyMarkers={propertyMarkers}
-          amenities={{ items: amenitiesList, error: amenitiesRes.error, raw: amenitiesRes.raw }}
-          properties={{ items: propertyList, error: propertiesRes.error, raw: propertiesRes.raw }}
-          similar={{ items: similarList, error: similarRes.error, raw: similarRes.raw }}
+          amenities={{ items: amenitiesList, error: amenitiesRes.error }}
+          properties={{ items: propertyList, error: propertiesRes.error }}
+          similar={{ items: similarList, error: similarRes.error }}
           summary={{ data: summaryRes.data, error: summaryRes.error }}
+          schools={{ items: schoolsResult, isLoading: false }}
         />
       </div>
     </main>

@@ -33,27 +33,39 @@ type SimilarPanelProps = {
   records?: SimilarRecord[];
   error?: string;
   raw?: unknown;
+  onJumpToSuburb?: (name: string) => void;
 };
 
 function getName(record: SimilarRecord): string {
   return record.name || record.area_name || record.suburb || "Unnamed suburb";
 }
 
-function getSummary(record: SimilarRecord): string {
-  return record.summary || record.short_summary || "No summary available.";
+function getSummary(record: SimilarRecord): string | null {
+  const summary = record.summary ?? record.short_summary;
+  if (typeof summary !== "string") {
+    return null;
+  }
+
+  const trimmed = summary.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function getSimilarity(record: SimilarRecord): string {
+function getSimilarity(record: SimilarRecord): number | null {
   const value = record.similarity ?? record.similarity_score;
   if (typeof value !== "number" || !isFinite(value)) {
-    return "Similarity N/A";
+    return null;
   }
-  return `${Math.round(value * 100)}% match`;
+
+  const percentage = value > 1 ? value : value * 100;
+  return Number.isFinite(percentage) ? percentage : null;
 }
 
-function getMedian(record: SimilarRecord): string {
+function getMedian(record: SimilarRecord): number | null {
   const value = record.medianPrice ?? record.median_price ?? record.price;
-  return formatAUD(value ?? undefined);
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
 }
 
 function getChange(record: SimilarRecord): { icon: "up" | "down"; label: string } | null {
@@ -67,7 +79,7 @@ function getChange(record: SimilarRecord): { icon: "up" | "down"; label: string 
   return { icon, label };
 }
 
-export function SimilarPanel({ records = [], error, raw }: SimilarPanelProps) {
+export function SimilarPanel({ records = [], error, raw, onJumpToSuburb }: SimilarPanelProps) {
   return (
     <Card className="bg-white">
       <CardHeader className="space-y-1">
@@ -89,10 +101,30 @@ export function SimilarPanel({ records = [], error, raw }: SimilarPanelProps) {
             {records.map((record, index) => {
               const name = getName(record);
               const change = getChange(record);
+              const similarity = getSimilarity(record);
+              const medianValue = getMedian(record);
+              const summary = getSummary(record);
+              const medianDisplay = typeof medianValue === "number" ? formatAUD(medianValue) : null;
+              const hasChange = Boolean(change);
+
+              const handleActivate = () => {
+                onJumpToSuburb?.(name);
+              };
+
               return (
                 <div
                   key={`${name}-${index}`}
-                  className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Focus map on ${name}`}
+                  onClick={handleActivate}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleActivate();
+                    }
+                  }}
+                  className="flex cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white hover:border-slate-300 hover:bg-slate-100"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -101,30 +133,36 @@ export function SimilarPanel({ records = [], error, raw }: SimilarPanelProps) {
                         <p className="text-xs uppercase tracking-wide text-slate-500">{record.state}</p>
                       )}
                     </div>
-                    <Badge variant="outline" className="bg-white text-slate-900">
-                      {getSimilarity(record)}
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-sm text-slate-600">
-                    <span className="font-medium text-blue-700">{getMedian(record)}</span>
-                    {change && (
-                      <span
-                        className={`flex items-center gap-1 text-xs font-medium ${
-                          change.icon === "up" ? "text-green-600" : "text-red-600"
-                        }`}
-                      >
-                        {change.icon === "up" ? (
-                          <TrendingUp className="h-4 w-4" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4" />
-                        )}
-                        {change.label}
-                      </span>
+                    {typeof similarity === "number" && (
+                      <Badge variant="outline" className="bg-white text-slate-900">
+                        {`${Math.round(similarity)}% match`}
+                      </Badge>
                     )}
                   </div>
 
-                  <p className="text-sm text-slate-500">{getSummary(record)}</p>
+                  {(medianDisplay || hasChange) && (
+                    <div className="flex items-center gap-4 text-sm text-slate-600">
+                      {medianDisplay && (
+                        <span className="font-medium text-blue-700">{medianDisplay}</span>
+                      )}
+                      {hasChange && change && (
+                        <span
+                          className={`flex items-center gap-1 text-xs font-medium ${
+                            change.icon === "up" ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {change.icon === "up" ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4" />
+                          )}
+                          {change.label}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {summary && <p className="text-sm text-slate-500">{summary}</p>}
                 </div>
               );
             })}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetClose,
@@ -13,14 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 import { MapPin, BedDouble, Bath, CarFront, CalendarDays } from "lucide-react";
 
 import type { MarkerItem } from "@/components/Map";
@@ -346,17 +340,6 @@ export function PropertiesPanel({
               })}
             </div>
           )}
-
-          <Accordion type="single" collapsible className="mt-6">
-            <AccordionItem value="raw-json">
-              <AccordionTrigger>Raw JSON</AccordionTrigger>
-              <AccordionContent>
-                <pre className="max-h-64 overflow-x-auto rounded-lg bg-slate-900/95 px-4 py-3 text-xs text-slate-100">
-                  {JSON.stringify(raw ?? properties, null, 2)}
-                </pre>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
         </CardContent>
       </Card>
 
@@ -401,19 +384,6 @@ export function PropertiesPanel({
                 <p className="font-medium text-slate-900">Listing date</p>
                 <p>{formatListingDate(selected)}</p>
               </div>
-
-              <Separator />
-
-              <Accordion type="single" collapsible>
-                <AccordionItem value="sheet-json">
-                  <AccordionTrigger>Raw JSON</AccordionTrigger>
-                  <AccordionContent>
-                    <pre className="max-h-52 overflow-x-auto rounded-lg bg-slate-900/95 px-4 py-3 text-xs text-slate-100">
-                      {JSON.stringify(selected, null, 2)}
-                    </pre>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
             </div>
           )}
 

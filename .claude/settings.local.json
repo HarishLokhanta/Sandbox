@@ -6,7 +6,10 @@
       "Bash(touch:*)",
       "Bash(curl -s \"https://www.microburbs.com.au/report_generator/api/suburb/properties?suburb=Belmont+North\" -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\")",
       "Bash(curl -s \"https://www.microburbs.com.au/report_generator/api/suburb/amenity?suburb=Belmont+North\" -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\")",
-      "Bash(curl -s \"https://www.microburbs.com.au/report_generator/api/suburb/schools?suburb=Belmont+North\" -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\")"
+      "Bash(curl -s \"https://www.microburbs.com.au/report_generator/api/suburb/schools?suburb=Belmont+North\" -H \"Authorization: Bearer test\" -H \"Content-Type: application/json\")",
+      "Bash(npm run build)",
+      "Bash(pkill:*)",
+      "Bash(timeout 15 npm run dev)"
     ],
     "deny": [],
     "ask": []
