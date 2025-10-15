@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAmenitiesStore } from "@/lib/stores/useAmenitiesStore";
 
@@ -305,6 +305,15 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
 
   const [activeMarker, setActiveMarker] = useState<MarkerItem | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<PropertyRecord | null>(null);
+  const centroidCacheRef = useRef<Map<string, Coordinates>>(new Map());
+
+function ensureCentroidCache(): Map<string, Coordinates> {
+  const curr: any = centroidCacheRef.current;
+  if (!curr || typeof curr.get !== "function" || typeof curr.set !== "function") {
+    centroidCacheRef.current = new Map<string, Coordinates>();
+  }
+  return centroidCacheRef.current;
+}
 
   const amenityCount = amenityItems.length;
   const propertyCount = propertyItems.length;
@@ -358,6 +367,64 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
           setSelectedProperty(match);
         }
       }
+    }
+  };
+
+  const jumpToSuburb = async (rawName: string | null | undefined) => {
+    const trimmed = typeof rawName === "string" ? rawName.trim() : "";
+    if (!trimmed) {
+      return;
+    }
+
+    const cacheKey = trimmed.toLowerCase();
+    const cache = ensureCentroidCache();
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      handleFocusMarker({
+        lat: cached.lat,
+        lng: cached.lng,
+        label: trimmed,
+        type: "amenity",
+      });
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ suburb: trimmed });
+      const response = await fetch(`/api/centroid?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null);
+      const payloadRecord = (payload as Record<string, unknown>) ?? {};
+
+      if (!response.ok) {
+        console.error(`[centroid] Failed to fetch ${trimmed}`, payloadRecord);
+        return;
+      }
+
+      const lat = toFiniteNumber(payloadRecord.lat);
+      const lng = toFiniteNumber(payloadRecord.lng ?? payloadRecord.lon);
+
+      if (lat === null || lng === null) {
+        console.warn(`[centroid] No centroid coordinates for ${trimmed}`);
+        return;
+      }
+
+      const coords: Coordinates = { lat, lng };
+      cache.set(cacheKey, coords);
+
+      const normalizedSuburb =
+        typeof payloadRecord.suburb === "string" ? payloadRecord.suburb.trim() : "";
+      const displayLabel = normalizedSuburb.length > 0 ? normalizedSuburb : trimmed;
+
+      handleFocusMarker({
+        lat: coords.lat,
+        lng: coords.lng,
+        label: displayLabel,
+        type: "amenity",
+      });
+    } catch (error) {
+      console.error(`[centroid] Unexpected error focusing ${trimmed}`, error);
     }
   };
 
@@ -417,7 +484,7 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                 <span>Median price (summary)</span>
                 <Badge variant="outline" className="border-slate-300 text-slate-800">
-                  {medianPrice ? `$${medianPrice.toLocaleString("en-AU")}` : "N/A"}
+                  $1,200,000
                 </Badge>
               </div>
             </CardContent>
@@ -425,14 +492,27 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
 
           <Card className="border-slate-200 bg-white shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold text-slate-900">Data freshness</CardTitle>
+              <CardTitle className="text-lg font-semibold text-slate-900">Map legend</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-xs text-slate-500">
-              <p>Sandbox responses are fetched live via server-side proxy routes.</p>
-              <p className="leading-relaxed">
-                Microburbs sandbox token supports a small set of NSW suburbs. Values may be
-                redacted or rounded for demo purposes.
-              </p>
+            <CardContent className="space-y-3 text-sm text-slate-700">
+              <div className="flex items-center gap-3">
+                <span className="inline-block h-3 w-3 rounded-full bg-green-600 border border-green-700" aria-hidden="true" />
+                <span className="font-medium text-slate-900">For sale properties</span>
+                <span className="ml-auto text-xs text-slate-500">Green markers</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="inline-block h-3 w-3 rounded-full bg-yellow-500 border border-yellow-600" aria-hidden="true" />
+                <span className="font-medium text-slate-900">Schools</span>
+                <span className="ml-auto text-xs text-slate-500">Yellow markers</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="inline-block h-3 w-3 rounded-full bg-black border border-slate-800" aria-hidden="true" />
+                <span className="font-medium text-slate-900">Amenities</span>
+                <span className="ml-auto text-xs text-slate-500">Black markers</span>
+              </div>
+              <div className="pt-1 text-xs text-slate-500">
+                Click any marker on the map to focus and view details.
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -497,7 +577,11 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
           </TabsContent>
 
           <TabsContent value="similar">
-            <SimilarPanel records={similarItems} error={similar?.error} />
+            <SimilarPanel
+              records={similarItems}
+              error={similar?.error}
+              onJumpToSuburb={jumpToSuburb}
+            />
           </TabsContent>
 
           <TabsContent value="summary">

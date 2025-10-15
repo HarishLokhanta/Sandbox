@@ -33,7 +33,7 @@ type SimilarPanelProps = {
   records?: SimilarRecord[];
   error?: string;
   raw?: unknown;
-  onJumpToSuburb?: (name: string) => void;
+  onJumpToSuburb?: (name: string) => void | Promise<void>;
 };
 
 function getName(record: SimilarRecord): string {
@@ -108,7 +108,7 @@ export function SimilarPanel({ records = [], error, raw, onJumpToSuburb }: Simil
               const hasChange = Boolean(change);
 
               const handleActivate = () => {
-                onJumpToSuburb?.(name);
+                void onJumpToSuburb?.(name);
               };
 
               return (

@@ -290,11 +290,10 @@ export default async function Page() {
         <header className="mb-10 space-y-2">
           <p className="text-xs uppercase tracking-[0.35rem] text-blue-700">Sandbox</p>
           <h1 className="text-4xl font-bold text-slate-900">
-            Belmont North — Real estate &amp; amenities (Sandbox)
+            Belmont North : Real estate &amp; amenities 
           </h1>
           <p className="max-w-2xl text-sm text-slate-600">
-            Server-rendered dashboard using shadcn/ui and Leaflet. All data is proxied through Next.js
-            API routes to avoid CORS and sanitized for safe parsing.
+            Your guide to real estate in Belmont North.
           </p>
         </header>
 

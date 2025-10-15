@@ -69,6 +69,7 @@ export const queryKeys = {
   ],
   similar: (suburb: string) => ["similar", suburb],
   risk: (suburb: string) => ["risk", suburb],
+  centroid: (suburb: string) => ["centroid", suburb],
 };
 
 const DEFAULT_JSON_LENGTH = 0;
@@ -114,6 +115,12 @@ type AmenitiesQueryResult = {
 type SimilarQueryResult = {
   results: SimilarSuburb[];
   suburb?: string;
+};
+
+type CentroidResponse = {
+  suburb: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 async function fetchProperties(
@@ -353,6 +360,66 @@ async function fetchRisk(suburb: string, signal?: AbortSignal) {
   return riskData;
 }
 
+async function fetchCentroid(suburb: string, signal?: AbortSignal) {
+  const trimmed = (suburb ?? "").trim();
+  const target = trimmed.length > 0 ? trimmed : "Belmont North";
+
+  const params = new URLSearchParams({ suburb: target });
+  const response = await fetchWithTimeout(`/api/centroid?${params}`, {
+    signal,
+    cache: "no-store",
+  });
+  const body = await parseResponse(response);
+
+  if (!response.ok) {
+    const message =
+      (body && typeof body === "object" && (body as any).error) ||
+      `Failed to fetch centroid (status ${response.status})`;
+    throw new Error(String(message));
+  }
+
+  if (isErrorPayload(body)) {
+    throw new Error(body.error);
+  }
+
+  const payload = (body ?? {}) as Record<string, unknown>;
+  const latValue = payload.lat;
+  const lngValue = payload.lng ?? payload.lon;
+
+  const lat =
+    typeof latValue === "number"
+      ? Number.isFinite(latValue)
+        ? latValue
+        : null
+      : typeof latValue === "string"
+      ? Number.isFinite(Number(latValue))
+        ? Number(latValue)
+        : null
+      : null;
+
+  const lng =
+    typeof lngValue === "number"
+      ? Number.isFinite(lngValue)
+        ? lngValue
+        : null
+      : typeof lngValue === "string"
+      ? Number.isFinite(Number(lngValue))
+        ? Number(lngValue)
+        : null
+      : null;
+
+  const resolved: CentroidResponse = {
+    suburb:
+      typeof payload.suburb === "string" && payload.suburb.trim().length > 0
+        ? (payload.suburb as string)
+        : target,
+    lat,
+    lng,
+  };
+
+  return resolved;
+}
+
 export function useProperties(
   suburb: string,
   propertyType: PropertyType = "all",
@@ -420,6 +487,19 @@ export function useRisk(
     queryKey: queryKeys.risk(suburb),
     queryFn: ({ signal }) => fetchRisk(suburb, signal),
     enabled: !!suburb,
+    ...options,
+  });
+}
+
+export function useCentroid(
+  suburb: string,
+  options?: Omit<UseQueryOptions<CentroidResponse, Error>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: queryKeys.centroid(suburb),
+    queryFn: ({ signal }) => fetchCentroid(suburb, signal),
+    enabled: !!suburb,
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }
