@@ -1,14 +1,14 @@
 // app/api/amenities/route.ts
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";          // ensure Node runtime on Vercel
-export const dynamic = "force-dynamic";   // disable static optimization
-export const revalidate = 0;              // no ISR caching
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 const BASE_URL = "https://www.microburbs.com.au/report_generator/api";
 
 function sanitizeInvalidJson(text: string): string {
-  // Replace non-JSON literals that sometimes appear in sandbox payloads
   return text
     .replace(/:\s*NaN\b/g, ": null")
     .replace(/:\s*Infinity\b/g, ": null")
@@ -33,9 +33,10 @@ export async function GET(req: Request) {
       cache: "no-store",
     });
   } catch (err: any) {
+    // Don’t break the UI — return empty data with a meta warning
     return NextResponse.json(
-      { error: `Upstream fetch failed: ${String(err?.message || err)}` },
-      { status: 502 }
+      { results: [], categories: [], meta: { warning: `Upstream fetch failed: ${String(err?.message || err)}` } },
+      { status: 200 }
     );
   }
 
@@ -44,45 +45,52 @@ export async function GET(req: Request) {
 
   if (!res.ok) {
     return NextResponse.json(
-      { error: `Upstream ${res.status}: ${bodyText.slice(0, 400)}` },
-      { status: 502 }
+      { results: [], categories: [], meta: { warning: `Upstream ${res.status}: ${bodyText.slice(0, 300)}` } },
+      { status: 200 }
     );
   }
 
-  // If upstream mislabeled content-type, try to parse anyway after sanitizing
   const textToParse = sanitizeInvalidJson(bodyText.trim());
-  if (!/application\/json/i.test(contentType) && !textToParse.startsWith("{") && !textToParse.startsWith("[")) {
+  const looksLikeJson = textToParse.startsWith("{") || textToParse.startsWith("[");
+
+  if (!/application\/json/i.test(contentType) && !looksLikeJson) {
     return NextResponse.json(
       {
-        error: "Upstream returned non-JSON payload.",
-        hint: "Sandbox or CDN returned HTML; try again or check token.",
-        contentType,
-        snippet: bodyText.slice(0, 400),
+        results: [],
+        categories: [],
+        meta: {
+          warning: "Upstream returned non-JSON payload; returning empty set.",
+          contentType,
+          snippet: bodyText.slice(0, 300),
+        },
       },
-      { status: 502 }
+      { status: 200 }
     );
   }
 
-  let raw: any;
+  let raw: any = {};
   try {
     raw = JSON.parse(textToParse);
   } catch (err: any) {
     return NextResponse.json(
       {
-        error: `Failed to parse upstream JSON: ${String(err?.message || err)}`,
-        snippet: textToParse.slice(0, 400),
+        results: [],
+        categories: [],
+        meta: {
+          warning: `Failed to parse upstream JSON: ${String(err?.message || err)}`,
+          snippet: textToParse.slice(0, 300),
+        },
       },
-      { status: 502 }
+      { status: 200 }
     );
   }
 
-  // Normalize for the UI
   const results = Array.isArray(raw?.results) ? raw.results : [];
   const normalized = results.map((it: any) => ({
     area_level: it?.area_level ?? "suburb",
     area_name: it?.area_name ?? suburb,
     name: typeof it?.name === "string" && it.name.trim() ? it.name.trim() : (it?.category ?? "Amenity"),
-    type: typeof it?.category === "string" ? it.category : "Other",  // keep both for UI
+    type: typeof it?.category === "string" ? it.category : "Other",
     category: typeof it?.category === "string" ? it.category : "Other",
     lat: Number(it?.lat),
     lng: Number(it?.lon ?? it?.lng),

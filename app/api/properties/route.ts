@@ -6,15 +6,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
-/**
- * Sandbox-safe proxy for "properties" (FORCE Belmont North):
- * - Pins suburb to Belmont North (sandbox token scope)
- * - Forces Node.js runtime (Vercel)
- * - Disables static optimization/ISR
- * - Defensively handles HTML/non-JSON upstream payloads
- * - Sanitizes invalid JSON tokens (NaN/Infinity/undefined)
- */
-
 const BASE_URL = "https://www.microburbs.com.au/report_generator/api";
 const SUBURB_QUERY = "Belmont+North";
 
@@ -41,8 +32,8 @@ export async function GET() {
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: `Upstream fetch failed: ${String(err?.message || err)}` },
-      { status: 502 }
+      { results: [], meta: { warning: `Upstream fetch failed: ${String(err?.message || err)}` } },
+      { status: 200 }
     );
   }
 
@@ -51,36 +42,40 @@ export async function GET() {
 
   if (!res.ok) {
     return NextResponse.json(
-      { error: `Upstream ${res.status}: ${bodyText.slice(0, 400)}` },
-      { status: 502 }
+      { results: [], meta: { warning: `Upstream ${res.status}: ${bodyText.slice(0, 300)}` } },
+      { status: 200 }
     );
   }
 
-  // If the CDN returned HTML (login/error), bail with a clean 502
   const textToParse = sanitizeInvalidJson(bodyText.trim());
   const looksLikeJson = textToParse.startsWith("{") || textToParse.startsWith("[");
+
   if (!/application\/json/i.test(contentType) && !looksLikeJson) {
     return NextResponse.json(
       {
-        error: "Upstream returned non-JSON payload.",
-        hint: "Sandbox/CDN sometimes sends HTML. Try again or check token.",
-        contentType,
-        snippet: bodyText.slice(0, 400),
+        results: [],
+        meta: {
+          warning: "Upstream returned non-JSON payload for properties; returning empty set.",
+          contentType,
+          snippet: bodyText.slice(0, 300),
+        },
       },
-      { status: 502 }
+      { status: 200 }
     );
   }
 
   try {
     const parsed = JSON.parse(textToParse);
-    return NextResponse.json(parsed, { status: 200 });
+    // Some feeds return `{ results: [...] }`, others return an array directly.
+    const results = Array.isArray(parsed?.results) ? parsed.results : (Array.isArray(parsed) ? parsed : []);
+    return NextResponse.json({ results }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json(
       {
-        error: `Failed to parse upstream JSON: ${String(err?.message || err)}`,
-        snippet: textToParse.slice(0, 400),
+        results: [],
+        meta: { warning: `Failed to parse upstream JSON: ${String(err?.message || err)}` },
       },
-      { status: 502 }
+      { status: 200 }
     );
   }
 }
