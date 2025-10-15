@@ -20,7 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { MapPin } from "lucide-react";
 import type { School } from "@/lib/schools";
 
-const Map = dynamic(() => import("../Map"), {
+const LeafletMap = dynamic(() => import("../Map"), {
   ssr: false,
   loading: () => (
     <div className="h-80 w-full rounded-2xl border border-slate-200 bg-gray-50 animate-pulse md:h-96" />
@@ -305,12 +305,12 @@ export function BelmontNorthDashboard(props: BelmontNorthDashboardProps) {
 
   const [activeMarker, setActiveMarker] = useState<MarkerItem | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<PropertyRecord | null>(null);
-  const centroidCacheRef = useRef<Map<string, Coordinates>>(new Map());
+const centroidCacheRef = useRef<globalThis.Map<string, Coordinates>>(new globalThis.Map());
 
-function ensureCentroidCache(): Map<string, Coordinates> {
+function ensureCentroidCache(): globalThis.Map<string, Coordinates> {
   const curr: any = centroidCacheRef.current;
   if (!curr || typeof curr.get !== "function" || typeof curr.set !== "function") {
-    centroidCacheRef.current = new Map<string, Coordinates>();
+    centroidCacheRef.current = new globalThis.Map<string, Coordinates>();
   }
   return centroidCacheRef.current;
 }
@@ -450,7 +450,7 @@ function ensureCentroidCache(): Map<string, Coordinates> {
     <div className="space-y-8">
       <section className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <div>
-          <Map
+          <LeafletMap
             center={safeCenter}
             amenityMarkers={amenityMarkers}
             propertyMarkers={propertyMarkers}
